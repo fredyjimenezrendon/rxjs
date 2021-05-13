@@ -1,9 +1,10 @@
 import {ChangeDetectionStrategy, Component, OnInit} from '@angular/core';
 
-import {EMPTY} from 'rxjs';
+import {BehaviorSubject, combineLatest, EMPTY, Subject} from 'rxjs';
 
 import {ProductService} from './product.service';
-import {catchError} from "rxjs/operators";
+import {catchError, map, tap} from "rxjs/operators";
+import {ProductCategoryService} from "../product-categories/product-category.service";
 
 @Component({
   templateUrl: './product-list.component.html',
@@ -12,23 +13,43 @@ import {catchError} from "rxjs/operators";
 })
 export class ProductListComponent {
   pageTitle = 'Product List';
-  errorMessage = '';
-  categories;
+  private errorMessageSubject = new Subject<string>();
+  errorMessage$ = this.errorMessageSubject.asObservable();
 
-  products$ = this.productService.products$.pipe(
+  private categorySelectedSubject = new BehaviorSubject<number>(0);
+  categorySelectedAction$ = this.categorySelectedSubject.asObservable();
+
+  products$ = combineLatest([
+    this.productService.productsWithAdd$,
+    this.categorySelectedAction$
+  ])
+    .pipe(
+      map(([products, selectedCategoryId]) =>
+        products.filter(product =>
+          selectedCategoryId ? product.categoryId === selectedCategoryId : true
+        )),
+      catchError(err => {
+        this.errorMessageSubject.next(err);
+        return EMPTY;
+      })
+    );
+
+  categories$ = this.productCategoryService.productsCategories$.pipe(
     catchError(err => {
-      this.errorMessage = err;
+      this.errorMessageSubject.next(err);
       return EMPTY;
     })
   )
 
-  constructor(private productService: ProductService) { }
+  constructor(private productService: ProductService,
+              private productCategoryService: ProductCategoryService) {
+  }
 
   onAdd(): void {
-    console.log('Not yet implemented');
+    this.productService.addProduct();
   }
 
   onSelected(categoryId: string): void {
-    console.log('Not yet implemented');
+    this.categorySelectedSubject.next(+categoryId);
   }
 }
